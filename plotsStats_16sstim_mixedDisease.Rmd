@@ -1,0 +1,634 @@
+---
+title: "plotsStats_2sstim_mixedDiseaseProject"
+author: "Kira Shaw"
+date: "2024-07-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+```
+
+``` {r, echo = FALSE, message = FALSE}
+
+# load libraries needed for analysis 
+library(readxl)
+library(dplyr)
+library(ggplot2)
+library(ggpubr)
+library(lmm)
+library(lme4)
+library(lmerTest)
+library(emmeans)
+library(psych)
+
+```
+
+```{r, echo  = FALSE}
+
+rm(list = ls(all.names = TRUE))
+
+## 1. READ IN DATA #########################################################################
+
+## load data table: 
+data_table <- read_excel("U:\\Kira\\Projects\\Beth_MixedDiseaseModels\\Data\\Exp3_16sStim\\16sStim_data4LMM.xlsx")
+
+## 2. CLEAN DATA TABLE #####################################################################
+
+### create an additional column which groups trials as either early (1-5), late (25-30), or none
+data_table$trialGrp <- data_table$trialID
+data_table$trialGrp[data_table$trialID<=5]<-'Early'
+data_table$trialGrp[data_table$trialID>5 & data_table$trialID<10]<-'Middle'
+data_table$trialGrp[data_table$trialID>=10]<-'Late'
+# specify this new variable is a factor
+data_table <- data_table %>% mutate(trialGrp = factor(trialGrp))
+
+#change sex and grp numbers to words
+data_table$sex[data_table$sex==1]<-'Male'
+data_table$sex[data_table$sex==2]<-'Female'
+
+data_table$grpID[data_table$grpID==1]<-'AD'
+data_table$grpID[data_table$grpID==2]<-'WT'
+data_table$grpID[data_table$grpID==3]<-'ATH'
+data_table$grpID[data_table$grpID==4]<-'MIX'
+
+## specify which numerical values are factors
+data_table <- data_table %>%
+  mutate(
+    animalID = factor(animalID),
+    sessID = factor(sessID),
+    expID = factor(expID),
+    locoGrp = factor(locoGrp)
+    )
+
+
+```
+
+<font size="10"> Boxplots and LMM results for 16s stim across disease groups: </font> 
+
+```{r, fig.height=10, fig.width=10, echo = FALSE, message=FALSE}
+
+## FIGURE 1:
+
+variablesofinterest <- c("hbt_W_maxpk","hbt_W_t2p","hbt_W_AUC","hbt_A_maxpk","hbt_A_t2p","hbt_A_AUC","hbt_V_maxpk","hbt_V_t2p","hbt_V_AUC","hbt_P_maxpk","hbt_P_t2p","hbt_P_AUC")
+
+for(i in 1:length(variablesofinterest)) { #loop ts metrics of interest
+  
+  # stats and plots for vessel ROIs collapsed across experimental groups
+  print(variablesofinterest[i]) #display which ts metric
+  #Run LMM comparing across vessels, with animal ID as random factor
+  model <- lmer(get(variablesofinterest[i])~grpID + (1|animalID), data = data_table) 
+  print(anova(model))
+  em_res = emmeans(model, ~ grpID) #emmeans() corrects p values for multiple comparisons 
+  print(pairs(em_res)) 
+  #plot as violin 
+  p<-ggplot(data_table, aes(x=grpID, y=get(variablesofinterest[i]), fill=grpID)) +
+    ylab(variablesofinterest[i])+
+  geom_violin(position=position_dodge(1))
+  print(p)
+    
+  ### MALES ONLY TO REMOVE SEX IMPACT
+  print(variablesofinterest[i]) #display which ts metric
+  #Run LMM comparing across vessels, with animal ID as random factor
+  model <- lmer(get(variablesofinterest[i])~grpID + (1|animalID), data = data_table %>% filter(sex=="Male")) 
+  print(anova(model))
+  em_res = emmeans(model, ~ grpID) #emmeans() corrects p values for multiple comparisons 
+  print(pairs(em_res)) 
+  
+} # end of looping ts metrics of interest
+
+# for copying and pasting data into graphpad or excel for plots/data sharing
+#t <- data_table %>% filter(vessID=="dv" & grpID==4)
+#clipr::write_clip(t$minpk)
+
+
+# also run stats on loco_auc between groups as need to know whether different experimental groups differences could be driven by significantly different levels of loco 
+print("Check for differences in locomotion across exp grps, both sexes")
+model <- lmer(loco_AUC~grpID + (1|animalID), data = data_table) 
+print(anova(model))
+print("Check for differences in locomotion across exp grps, male only")
+model <- lmer(loco_AUC~grpID + (1|animalID), data = data_table %>% filter(sex=="Male")) 
+print(anova(model))
+# NB no sig diffs in loco_auc across grps so dnt need pairwise
+#em_res = emmeans(model, ~ grpID)
+#print(pairs(em_res))
+
+rm(em_res,model,p,p1,i) #remove unused variables to tidy work space
+
+  
+```
+
+<font size="10"> Checking for sex differences: </font> 
+
+```{r, fig.height=10, fig.width=10, echo = FALSE, message=FALSE}
+
+## SUPP FIGURE 1:
+
+variablesofinterest <- c("hbt_W_maxpk","hbt_W_t2p","hbt_W_AUC", "hbt_W_reqPk","hbr_W_maxpk","hbr_W_t2p","hbr_W_AUC",
+                         "hbt_A_maxpk","hbt_A_t2p","hbt_A_AUC", "hbt_A_reqPk", "hbr_A_maxpk","hbr_A_t2p","hbr_A_AUC",
+                         "hbt_V_maxpk","hbt_V_t2p","hbt_V_AUC", "hbt_V_reqPk", "hbr_V_maxpk","hbr_V_t2p","hbr_V_AUC")
+
+for(i in 1:length(variablesofinterest)) { #loop ts metrics of interest
+  
+  
+  # stats and plots for vessel ROIs collapsed across experimental groups
+  print(variablesofinterest[i]) #display which ts metric
+  #Run LMM comparing across vessels, with animal ID as random factor
+  model <- lmer(get(variablesofinterest[i])~grpID*sex + (1|animalID), data = data_table %>% filter(grpID=="AD" | grpID=="WT")) 
+  print(anova(model))
+  #em_res = emmeans(model, ~ grpID) #emmeans() corrects p values for multiple comparisons 
+  #print(pairs(em_res)) 
+  #plot as violin 
+  p<-ggplot(data_table %>% filter(grpID=="AD" | grpID=="WT"), aes(x=sex, y=get(variablesofinterest[i]), fill=sex)) +
+    facet_wrap(~ grpID)+
+    ylab(variablesofinterest[i])+
+  geom_violin(position=position_dodge(1))
+  print(p)
+  
+} # end of looping ts metrics of interest
+
+# for copying and pasting data into graphpad or excel for plots/data sharing
+#t <- data_table %>% filter(vessID=="dv" & grpID==4)
+#clipr::write_clip(t$minpk)
+
+
+# also run stats on loco_auc between groups as need to know whether different experimental groups differences could be driven by significantly different levels of loco 
+print("Check for differences in locomotion across exp grps")
+model <- lmer(loco_AUC~grpID*sex + (1|animalID), data = data_table %>% filter(grpID=="AD" | grpID=="WT")) 
+print(anova(model))
+# NB no sig diffs in loco_auc across grps so dnt need pairwise
+#em_res = emmeans(model, ~ grpID)
+#print(pairs(em_res))
+
+rm(em_res,model,p,p1,i) #remove unused variables to tidy work space
+
+  
+```
+
+<font size="10"> Exploring impact of locomotion on haem responses: </font> 
+
+```{r, fig.height=10, fig.width=10, echo = FALSE, message=FALSE}
+
+## FIGURE 2:
+
+# correlation plots looking at loco AUC by hbt AUC separated across ROI categories and by disease
+
+variablesofinterest <- c("hbt_W_AUC","hbt_A_AUC","hbt_V_AUC","hbt_P_AUC")
+
+for(i in 1:length(variablesofinterest)) { #loop ts metrics of interest
+  
+  # see if locomotion AUC correlates with min peak or max peak values
+  p2 <- ggplot(data_table, aes(x=loco_AUC, y=get(variablesofinterest[i]),color=grpID)) +
+    geom_point(size=1) +
+    ggtitle('Correlating locomotion with haem responses') +
+    geom_smooth(method=lm, se=FALSE, fullrange=FALSE)+ 
+    #facet_wrap(~ grpID)+
+    ylab(variablesofinterest[i])+
+    theme_classic(base_size = 14)
+    #theme(legend.position = "none")
+  print(p2)
+  
+  #STATS: CORR
+  print(variablesofinterest[i])
+  
+  #t <- data_table %>% filter(vessID=="dv")
+  ##clipr::write_clip(t$loco_auc)
+  #clipr::write_clip(t$minpk)
+  
+  print("Group 1:")
+  t <- data_table %>% filter(grpID=="AD")
+  print(cor.test(formula = ~loco_AUC+get(variablesofinterest[i]), data=t))
+  
+  print("Group 2:")
+  t <- data_table %>% filter(grpID=="WT")
+  print(cor.test(formula = ~loco_AUC+get(variablesofinterest[i]), data=t))
+  
+  print("Group 3:")
+  t <- data_table %>% filter(grpID=="ATH")
+  print(cor.test(formula = ~loco_AUC+get(variablesofinterest[i]), data=t))
+  
+  print("Group 4:")
+  t <- data_table %>% filter(grpID=="MIX")
+  print(cor.test(formula = ~loco_AUC+get(variablesofinterest[i]), data=t))
+
+  
+} # end of looping ts metrics of interest
+
+
+  
+```
+
+<font size="10"> Boxplots and LMM results for 16s stim across disease groups AND locomotion condition: </font> 
+
+```{r, fig.height=10, fig.width=10, echo = FALSE, message=FALSE}
+
+## FIGURE 3:
+
+variablesofinterest <- c("hbt_W_maxpk","hbt_W_t2p","hbt_W_t2o","hbt_W_AUC","hbt_A_maxpk","hbt_A_t2p","hbt_A_t2o","hbt_A_AUC","hbt_V_maxpk","hbt_V_t2p","hbt_V_t2o","hbt_V_AUC","hbt_P_maxpk","hbt_P_t2p","hbt_P_t2o","hbt_P_AUC")
+
+for(i in 1:length(variablesofinterest)) { #loop ts metrics of interest
+  
+  # stats and plots for vessel ROIs collapsed across experimental groups
+  print(variablesofinterest[i]) #display which ts metric
+  #Run LMM comparing across vessels, with animal ID as random factor
+  model <- lmer(get(variablesofinterest[i])~grpID*locoGrp + (1|animalID), data = data_table) 
+  print(anova(model))
+ # em_res = emmeans(model, ~ grpID*locoGrp) #emmeans() corrects p values for multiple comparisons 
+ # print(pairs(em_res)) 
+  
+  ## Due to there being SO many multiple comparisons, to explore the differences further, stats were run within loco condition to compare between grps
+  print('Grp 1')
+  t <- data_table %>% filter(locoGrp=="1")
+  model <- lmer(get(variablesofinterest[i])~grpID + (1|animalID), data = t) 
+  em_res = emmeans(model, ~ grpID) 
+  print(pairs(em_res))
+  
+  print('Grp 2')
+  t <- data_table %>% filter(locoGrp=="2")
+  model <- lmer(get(variablesofinterest[i])~grpID + (1|animalID), data = t) 
+  em_res = emmeans(model, ~ grpID) 
+  print(pairs(em_res))
+  
+  print('Grp 3')
+  t <- data_table %>% filter(locoGrp=="3")
+  model <- lmer(get(variablesofinterest[i])~grpID + (1|animalID), data = t) 
+  em_res = emmeans(model, ~ grpID) 
+  print(pairs(em_res))
+  
+  print('Grp 4')
+  t <- data_table %>% filter(locoGrp=="4")
+  model <- lmer(get(variablesofinterest[i])~grpID + (1|animalID), data = t) 
+  em_res = emmeans(model, ~ grpID) 
+  print(pairs(em_res))
+  
+  #plot as violin 
+  p<-ggplot(data_table, aes(x=grpID, y=get(variablesofinterest[i]), fill=grpID)) +
+    ylab(variablesofinterest[i])+
+  geom_violin(position=position_dodge(1))+
+  facet_wrap(~locoGrp)  
+  print(p)
+  
+} # end of looping ts metrics of interest
+
+# for copying and pasting data into graphpad or excel for plots/data sharing
+#t <- data_table %>% filter(vessID=="dv" & grpID==4)
+#clipr::write_clip(t$minpk)
+
+
+
+  
+```
+
+<font size="10"> Impact of trial number (1-15) or experimental day (1-2) - scatterplots: </font> 
+
+```{r, fig.height=10, fig.width=10, echo = FALSE, message=FALSE}
+
+## FIGURE 4
+
+## scatterplots and correlations to look at loco AUC and hbt AUC against trial number 
+variablesofinterest <- c("loco_AUC","hbt_W_AUC","hbt_A_AUC","hbt_V_AUC","hbt_P_AUC")
+
+data_table <- data_table %>% filter(expID!="3")
+
+for(i in 1:length(variablesofinterest)) { #loop ts metrics of interest
+  
+  
+  # see if locomotion AUC correlates with min peak or max peak values
+  p1 <- ggplot(data_table, aes(x=trialID, y=get(variablesofinterest[i]))) +
+    geom_point(size=1) +
+    ggtitle('Impact of trial number') +
+    geom_smooth(method=lm, se=FALSE, fullrange=FALSE)+ 
+    #facet_wrap(~ grpID)+
+    ylab(variablesofinterest[i])+
+    theme_classic(base_size = 14)
+    #theme(legend.position = "none")
+  print(p1)
+  
+    #STATS: CORR
+  print(variablesofinterest[i])
+  print("Collapsed across all groups")
+  print(cor.test(formula = ~trialID+get(variablesofinterest[i]), data=data_table))
+  
+  # see if locomotion AUC correlates with min peak or max peak values
+  p2 <- ggplot(data_table, aes(x=trialID, y=get(variablesofinterest[i]),color=grpID)) +
+    geom_point(size=1) +
+    ggtitle('Impact of trial number') +
+    geom_smooth(method=lm, se=FALSE, fullrange=FALSE)+ 
+    facet_wrap(~expID)+
+    ylab(variablesofinterest[i])+
+    theme_classic(base_size = 14)
+    #theme(legend.position = "none")
+  print(p2)
+  
+  #STATS: CORR
+  print(variablesofinterest[i])
+  
+  print("Group 1, Imaging Day 1:")
+  t <- data_table %>% filter(grpID=="AD" & expID=="1")
+  print(cor.test(formula = ~trialID+get(variablesofinterest[i]), data=t))
+  print("Group 1, Imaging Day 2:")
+  t <- data_table %>% filter(grpID=="AD" & expID=="2")
+  print(cor.test(formula = ~trialID+get(variablesofinterest[i]), data=t))
+  
+  
+  print("Group 2, Imaging Day 1:")
+  t <- data_table %>% filter(grpID=="WT" & expID=="1")
+  print(cor.test(formula = ~trialID+get(variablesofinterest[i]), data=t))
+  print("Group 2, Imaging Day 2:")
+  t <- data_table %>% filter(grpID=="WT" & expID=="2")
+  print(cor.test(formula = ~trialID+get(variablesofinterest[i]), data=t))
+  
+  print("Group 3, Imaging Day 1:")
+  t <- data_table %>% filter(grpID=="ATH" & expID=="1")
+  print(cor.test(formula = ~trialID+get(variablesofinterest[i]), data=t))
+  print("Group 3, Imaging Day 2:")
+  t <- data_table %>% filter(grpID=="ATH" & expID=="2")
+  print(cor.test(formula = ~trialID+get(variablesofinterest[i]), data=t))
+  
+  print("Group 4, Imaging Day 1:")
+  t <- data_table %>% filter(grpID=="MIX" & expID=="1")
+  print(cor.test(formula = ~trialID+get(variablesofinterest[i]), data=t))
+  print("Group 4, Imaging Day 2:")
+  t <- data_table %>% filter(grpID=="MIX" & expID=="2")
+  print(cor.test(formula = ~trialID+get(variablesofinterest[i]), data=t))
+
+  
+} # end of looping ts metrics of interest
+
+```
+
+<font size="10"> Impact of trial number (1-15) - boxplots and LMMs: </font> 
+
+```{r, fig.height=10, fig.width=10, echo = FALSE, message=FALSE}
+
+variablesofinterest <- c("hbt_W_maxpk","hbt_W_t2p","hbt_W_t2o","hbt_W_AUC","hbt_A_maxpk","hbt_A_t2p","hbt_A_t2o","hbt_A_AUC","hbt_V_maxpk","hbt_V_t2p","hbt_V_t2o","hbt_V_AUC","hbt_P_maxpk","hbt_P_t2p","hbt_P_t2o","hbt_P_AUC")
+
+## FIGURE 4
+
+###### impact of trial number
+
+# general impact of trial number or exp day on metrics
+  print("Check for differences of exp day or trial ID on loco AUC")
+  model <- lmer(loco_AUC~trialGrp + (1|animalID), data = t) 
+  print(anova(model))
+
+
+t <- data_table %>% filter(trialGrp!="Middle") #remove 'middle' trials and only look at early or late trials
+
+## COLLAPSE ACROSS DISEASE GRPS
+# run LMM to compare early to late trials per loco cond, and plot metrics
+for(i in 1:length(variablesofinterest)) { #loop ts metrics of interest
+  
+  # stats and plots for vessel ROIs collapsed across experimental groups
+  print(variablesofinterest[i]) #display which ts metric
+  
+    #individual datapts, colour coded by animal ID, facet wrap to visualise per grp
+  p1 <- t %>%
+  ggplot(aes(x=trialGrp, y=get(variablesofinterest[i]), fill=trialGrp)) +
+    geom_violin(position=position_dodge(1)) +
+  ylab(variablesofinterest[i]) +
+  xlab('Trial Grp')+
+  theme_classic(base_size = 14)+
+  theme(legend.position = "right")+ #"right"
+  facet_wrap(~locoGrp)
+  print(p1)
+  
+  # general impact of trial number or exp day on metrics
+  print("Check for differences of exp day or trial ID on haem AUC")
+  model <- lmer(get(variablesofinterest[i])~trialGrp + (1|animalID), data = t) 
+  print(anova(model))
+  
+  model <- lmer(get(variablesofinterest[i])~trialGrp*locoGrp + (1|animalID), data = t) 
+  print(anova(model))
+  #em_res = emmeans(model, ~ trialGrp*locoGrp) #emmeans() corrects p values for multiple comparisons 
+  #print(pairs(em_res)) 
+  
+  ## Due to there being SO many multiple comparisons, to explore the differences further, stats were run within loco condition to compare between grps
+  print('Loco Grp 1')
+  model <- lmer(get(variablesofinterest[i])~trialGrp + (1|animalID), data = t%>% filter(locoGrp=="1")) 
+  print(anova(model))
+  em_res = emmeans(model, ~ trialGrp) 
+  print(pairs(em_res))
+  
+  print('Loco Grp 2')
+  model <- lmer(get(variablesofinterest[i])~trialGrp + (1|animalID), data = t%>% filter(locoGrp=="2")) 
+  em_res = emmeans(model, ~ trialGrp) 
+  print(pairs(em_res))
+
+  
+  print('Loco Grp 3')
+  model <- lmer(get(variablesofinterest[i])~trialGrp + (1|animalID), data = t%>% filter(locoGrp=="3")) 
+  em_res = emmeans(model, ~ trialGrp) 
+  print(pairs(em_res))
+
+  print('Loco Grp 4')
+  model <- lmer(get(variablesofinterest[i])~trialGrp + (1|animalID), data = t%>% filter(locoGrp=="4")) 
+  em_res = emmeans(model, ~ trialGrp) 
+  print(pairs(em_res))
+
+  
+  p1 <- t %>%
+  ggplot(aes(x=trialGrp, y=get(variablesofinterest[i]), fill=grpID)) +
+    geom_violin(position=position_dodge(1)) +
+  ylab(variablesofinterest[i]) +
+  xlab('Trial Grp')+
+  theme_classic(base_size = 14)+
+  theme(legend.position = "none")+ #"right"
+  facet_wrap(~locoGrp)
+  print(p1)
+  
+  print('Loco Grp 1')
+  model <- lmer(get(variablesofinterest[i])~trialGrp*grpID + (1|animalID), data = t%>% filter(locoGrp=="1")) 
+  print(anova(model))
+  print('disease only compare')
+  em_res = emmeans(model, ~ grpID) 
+  print(pairs(em_res))
+  print('disease AND exp day compare')
+  em_res = emmeans(model, ~ trialGrp*grpID) 
+  print(pairs(em_res))
+
+  print('Loco Grp 2')
+  model <- lmer(get(variablesofinterest[i])~trialGrp*grpID + (1|animalID), data = t%>% filter(locoGrp=="2")) 
+  print(anova(model))
+  print('disease only compare')
+  em_res = emmeans(model, ~ grpID) 
+  print(pairs(em_res))
+  print('disease AND exp day compare')
+  em_res = emmeans(model, ~ trialGrp*grpID) 
+  print(pairs(em_res))
+    
+  print('Loco Grp 3')
+  model <- lmer(get(variablesofinterest[i])~trialGrp*grpID + (1|animalID), data = t%>% filter(locoGrp=="3")) 
+  print(anova(model))
+  print('disease only compare')
+  em_res = emmeans(model, ~ grpID) 
+  print(pairs(em_res))
+  print('disease AND exp day compare')
+  em_res = emmeans(model, ~ trialGrp*grpID) 
+  print(pairs(em_res))
+  
+  print('Loco Grp 4')
+  model <- lmer(get(variablesofinterest[i])~trialGrp*grpID + (1|animalID), data = t%>% filter(locoGrp=="4")) 
+  print(anova(model))
+  print('disease only compare')
+  em_res = emmeans(model, ~ grpID) 
+  print(pairs(em_res))
+  print('disease AND exp day compare')
+  em_res = emmeans(model, ~ trialGrp*grpID) 
+  print(pairs(em_res))
+  
+  
+} # end of looping ts metrics of interest
+
+
+```
+
+<font size="10"> Impact of experimental day (1-2)- boxplots and LMMs: </font> 
+
+```{r, fig.height=10, fig.width=10, echo = FALSE, message=FALSE}
+
+variablesofinterest <- c("hbt_W_maxpk","hbt_W_t2p","hbt_W_t2o","hbt_W_AUC","hbt_A_maxpk","hbt_A_t2p","hbt_A_t2o","hbt_A_AUC","hbt_V_maxpk","hbt_V_t2p","hbt_V_t2o","hbt_V_AUC","hbt_P_maxpk","hbt_P_t2p","hbt_P_t2o","hbt_P_AUC")
+
+## FIGURE 5
+
+  ## impact of exp day #########################################################
+
+  print('Impact of exp day on loco auc across all loco conditions')
+  model <- lmer(loco_AUC~expID + (1|animalID), data = data_table) 
+  print(anova(model))
+  em_res = emmeans(model, ~expID) #emmeans() corrects p values for multiple comparisons 
+  print(pairs(em_res)) 
+  
+  # check for running differences across experimental days within loco grps
+  print('Loco Grp 1')
+  t <- data_table %>% filter(locoGrp=="1")
+  model <- lmer(loco_AUC~expID + (1|animalID), data = t) 
+  em_res = emmeans(model, ~expID) #emmeans() corrects p values for multiple comparisons 
+  print(pairs(em_res)) 
+  print('Loco Grp 2')
+  t <- data_table %>% filter(locoGrp=="2")
+  model <- lmer(loco_AUC~expID + (1|animalID), data = t) 
+  em_res = emmeans(model, ~expID) #emmeans() corrects p values for multiple comparisons 
+  print(pairs(em_res)) 
+  print('Loco Grp 3')
+  t <- data_table %>% filter(locoGrp=="3")
+  model <- lmer(loco_AUC~expID + (1|animalID), data = t) 
+  em_res = emmeans(model, ~expID) #emmeans() corrects p values for multiple comparisons 
+  print(pairs(em_res)) 
+  print('Loco Grp 4')
+  t <- data_table %>% filter(locoGrp=="4")
+  model <- lmer(loco_AUC~expID + (1|animalID), data = t) 
+  em_res = emmeans(model, ~expID) #emmeans() corrects p values for multiple comparisons 
+  print(pairs(em_res)) 
+
+# run LMM to compare exp day 1 to exp day 4 and separate by loco cond
+# WARNING- for loco cond 3 and 4, still running more on day 1 so not too useful 
+for(i in 1:length(variablesofinterest)) { #loop ts metrics of interest
+  
+  # stats and plots for vessel ROIs collapsed across experimental groups
+  print(variablesofinterest[i]) #display which ts metric
+  
+  # general impact of  exp day on metrics
+  print("Check for differences of exp day or trial ID on haem AUC")
+  model <- lmer(get(variablesofinterest[i])~expID + (1|animalID), data = data_table) 
+  print(anova(model))
+  em_res = emmeans(model, ~expID) #emmeans() corrects p values for multiple comparisons 
+  print(pairs(em_res)) 
+
+  #individual datapts, colour coded by animal ID, facet wrap to visualise per grp
+  p1 <- data_table %>%
+  ggplot(aes(x=expID, y=get(variablesofinterest[i]), fill=expID)) +
+    geom_violin(position=position_dodge(1)) +
+  ylab(variablesofinterest[i]) +
+  xlab('ExpDay')+
+  theme_classic(base_size = 14)+
+  theme(legend.position = "right")+ #"right"
+  facet_wrap(~locoGrp)
+  print(p1)
+  
+  model <- lmer(get(variablesofinterest[i])~expID*locoGrp + (1|animalID), data = data_table) 
+  print(anova(model))
+  
+  ## Due to there being SO many multiple comparisons, to explore the differences further, stats were run within loco condition to compare between grps
+  print('Loco Grp 1')
+  model <- lmer(get(variablesofinterest[i])~expID + (1|animalID), data = data_table%>% filter(locoGrp=="1")) 
+  em_res = emmeans(model, ~ expID) 
+  print(pairs(em_res))
+
+  print('Loco Grp 2')
+  model <- lmer(get(variablesofinterest[i])~expID + (1|animalID), data = data_table%>% filter(locoGrp=="2")) 
+  em_res = emmeans(model, ~ expID) 
+  print(pairs(em_res))
+
+  print('Loco Grp 3')
+  model <- lmer(get(variablesofinterest[i])~expID + (1|animalID), data = data_table%>% filter(locoGrp=="3")) 
+  em_res = emmeans(model, ~ expID) 
+  print(pairs(em_res))
+
+  print('Loco Grp 4')
+  model <- lmer(get(variablesofinterest[i])~expID + (1|animalID), data = data_table%>% filter(locoGrp=="4")) 
+  em_res = emmeans(model, ~ expID) 
+  print(pairs(em_res))
+
+  
+p1 <- data_table %>%
+  ggplot(aes(x=expID, y=get(variablesofinterest[i]), fill=grpID)) +
+    geom_violin(position=position_dodge(1)) +
+  ylab(variablesofinterest[i]) +
+  xlab('ExpDay')+
+  theme_classic(base_size = 14)+
+  theme(legend.position = "right")+ #"right"
+  facet_wrap(~locoGrp)
+  print(p1)
+  
+  print('Loco Grp 1')
+  model <- lmer(get(variablesofinterest[i])~expID*grpID + (1|animalID), data = data_table%>% filter(locoGrp=="1")) 
+  print(anova(model))
+  print('disease only compare')
+  em_res = emmeans(model, ~ grpID) 
+  print(pairs(em_res))
+  print('disease AND exp day compare')
+  em_res = emmeans(model, ~ expID*grpID) 
+  print(pairs(em_res))
+  
+  print('Loco Grp 2')  
+  model <- lmer(get(variablesofinterest[i])~expID*grpID + (1|animalID), data = data_table%>% filter(locoGrp=="2")) 
+  print(anova(model))
+  print('disease only compare')
+  em_res = emmeans(model, ~ grpID) 
+  print(pairs(em_res))
+  print('disease AND exp day compare')
+  em_res = emmeans(model, ~ expID*grpID) 
+  print(pairs(em_res))
+  
+  print('Loco Grp 3')  
+  model <- lmer(get(variablesofinterest[i])~expID*grpID + (1|animalID), data = data_table%>% filter(locoGrp=="3")) 
+  print(anova(model))
+  print('disease only compare')
+  em_res = emmeans(model, ~ grpID) 
+  print(pairs(em_res))
+  print('disease AND exp day compare')
+  em_res = emmeans(model, ~ expID*grpID) 
+  print(pairs(em_res))
+  
+  print('Loco Grp 4')  
+  model <- lmer(get(variablesofinterest[i])~expID*grpID + (1|animalID), data = data_table%>% filter(locoGrp=="4")) 
+  print(anova(model))
+  print('disease only compare')
+  em_res = emmeans(model, ~ grpID) 
+  print(pairs(em_res))
+  print('disease AND exp day compare')
+  em_res = emmeans(model, ~ expID*grpID) 
+  print(pairs(em_res))
+  
+  
+} # end of looping ts metrics of interest
+
+# for copying and pasting data into graphpad or excel for plots/data sharing
+#t <- data_table %>% filter(vessID=="dv" & grpID==4)
+#clipr::write_clip(t$minpk)
+
+
+```
